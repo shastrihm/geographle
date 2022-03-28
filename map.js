@@ -18,14 +18,13 @@ var context = canvas.getContext('2d');
 canvas.width = BMAP_WIDTH;
 canvas.height = BMAP_HEIGHT;
 
-const EXTENT_OFFSET = 10000; // FOV: # of units (in mercator) in each cardinal direction from center
+const EXTENT_OFFSET = 50000; // FOV: # of units (in mercator) in each cardinal direction from center
                             // to allow viewing/dragging the map (bounding box of viewable area)
-
-const ZOOM_LEVEL = 13; // Level to start zoom at. Number denotes the
+const ZOOM_LEVEL = 10; // Level to start zoom at. Number denotes the
                       // zoom level resulting from clicking the zoom in button that many times
 
 const MAX_ZOOM = 17;
-const MIN_ZOOM = 13;
+const MIN_ZOOM = ZOOM_LEVEL;
 
 var HOME_COORDS = null; // solution to puzzle -- in mercator
 

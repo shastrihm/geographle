@@ -1,15 +1,41 @@
-const POINT_ICON_RADIUS = 4; // radius of dot that is drawn when user clicks on guess map
+const GUESSPOINT_ID = 'P';
+const LIMITCIRCLE_ID = 'C';
+const POINT_ICON_RADIUS = 4;
+
+const WIN_DISTANCE = 30 // in km
+var guess_map = new ol.Map({
+        target: "guessmap",
+        layers: [
+          new ol.layer.Tile({
+            source: new ol.source.OSM()
+          })
+        ],
+        view: new ol.View({
+          center: ol.proj.fromLonLat([37.41, 8.82]),
+          zoom: 0
+        })
+      });
+
+guess_map.addControl(new ol.control.ScaleLine());
+
+
+
+var vectorLayer = new ol.layer.Vector({
+  source: new ol.source.Vector(), // needs to be an ol.source.Vector (see guess_map.on)
+  name: "marker"
+});
+
+guess_map.addLayer(vectorLayer);
 
 
 function getUserSubmittedCoords(vectorLayer){
   // assumes user has already submitted coords
-  // in [x, y] (mercator) format
-  var point = vectorLayer.getSource().getFeatures()[0].A.geometry.getCoordinates();
-  return point;
+  // in [x, y] projection units format
+  return vectorLayer.getSource().getFeatureById(GUESSPOINT_ID).getGeometry().getCoordinates();
 }
 
 function hasUserSubmittedCoords(vectorLayer){
-  return vectorLayer.getSource() != null;
+  return vectorLayer.getSource().getFeatureById(GUESSPOINT_ID) != null;
 }
 
 
@@ -25,41 +51,86 @@ function measure(lat1, lon1, lat2, lon2){
     return d; // kilometers
 }
 
-function distance(pt1, pt2){
-  // calculates distance between two points in meters
-  var pt1 = ol.proj.toLonLat(pt1);
-  var pt2 = ol.proj.toLonLat(pt2);
-  return measure(pt1[1], pt1[0], pt2[1], pt2[0])
-  //return (((pt2[0] - pt1[0])**2) - ((pt2[1] - pt1[1])**2))**0.5
+function distance(pt1, pt2, convertToLonLat = true){
+  // calculates distance between two points in km,
+  // takes into account curvature of the earth
+  if (convertToLonLat){
+    var pt1 = ol.proj.toLonLat(pt1);
+    var pt2 = ol.proj.toLonLat(pt2);
+    return measure(pt1[1], pt1[0], pt2[1], pt2[0]);
+  }
+  else {
+    return measure(pt1[1], pt1[0], pt2[1], pt2[0]);
+  }
+}
+
+function getRandomPointDistanceKAway(center, k){
+  var angle = Math.random()*2*Math.PI;
+  var xOff = Math.cos(angle)*k;
+  var yOff = Math.sin(angle)*k;
+  return ol.proj.fromLonLat(ol.proj.toLonLat([center[0] + xOff, center[1] + yOff]));
+}
+
+function getConstrainedCircle(guess, sol){
+  // Returns circle
+  // Proceeds by exponentially increasing search radius, stop when overshoot.
+  // returns circle with diameter equal to last updated search radius,
+  // centered at midpoint between guess and end of diameter on the
+  // direction
+  // ALL COMPUTATION IS DONE IN PROJECTION UNITS (PIXELS) SO NO TAKING INTO ACCOUNT CURVATURE OF EARTH
+
+  var guess = ol.proj.fromLonLat(guess);
+  var guessX = guess[0];
+  var guessY = guess[1];
+
+  var sol = ol.proj.fromLonLat(sol);
+  var solX = sol[0];
+  var solY = sol[1];
+
+  var init_dist = 1;
+  const multipler = 2;
+  var circle = new ol.geom.Circle([guessX, guessY], init_dist);
+  while (!circle.intersectsCoordinate([solX,solY])){
+    init_dist = init_dist*multipler;
+    circle.setRadius(init_dist);
+  }
+
+  var new_radius = init_dist/2;
+  var midpoint = getRandomPointDistanceKAway([guessX, guessY], new_radius);
+  var precise_circle = new ol.geom.Circle(midpoint, new_radius);
+  while (!precise_circle.intersectsCoordinate([solX,solY])){
+    midpoint = getRandomPointDistanceKAway([guessX, guessY], new_radius);
+    precise_circle.setCenter(midpoint);
+  }
+  return precise_circle;
+}
+
+function drawCircleOnMap(circle, map){
+  var circleFeature = new ol.Feature(circle);
+  var source = vectorLayer.getSource();
+  var oldcircle = source.getFeatureById(LIMITCIRCLE_ID);
+  source.removeFeature(oldcircle);
+  source.addFeature(circleFeature);
+  circleFeature.setId(LIMITCIRCLE_ID);
+  //vectorLayer.setSource(vectorSource);
+}
+
+function fitExtentBasedOnCircle(circle, map){
+  // Fits map view so that it is constrained to
+  // the circle area
+  map.getView().fit(circle, {duration:2000, easing:ol.easing.easeOut});
 }
 
 
-var guess_map = new ol.Map({
-        target: 'guessmap',
-        layers: [
-          new ol.layer.Tile({
-            source: new ol.source.OSM()
-          })
-        ],
-        view: new ol.View({
-          center: ol.proj.fromLonLat([37.41, 8.82]),
-          zoom: 0
-        })
-      });
+function getNewCircleAndDrawOnMap(guess_coords, solution_coords){
+  // in lon, lat units. gets converted to projectoin units in getConstrainedCircle
+  // to fix bug where scrolling way far out on map misrepresents projection coords
+  var circle = getConstrainedCircle(guess_coords, solution_coords);
+  drawCircleOnMap(circle, guess_map);
+  fitExtentBasedOnCircle(circle, guess_map);
+}
 
 
-var vectorLayer = new ol.layer.Vector({
-  source: null, // needs to be an ol.source.Vector (see guess_map.on)
-  name: "marker",
-  style: new ol.style.Style({
-    image: new ol.style.Circle({
-      radius: POINT_ICON_RADIUS,
-      fill: new ol.style.Fill({color: 'red'})
-    })
-  })
-});
-
-guess_map.addLayer(vectorLayer);
 
 
 var guessMapSubmitButton = document.createElement('button');
@@ -70,24 +141,42 @@ document.getElementById("guessmap").appendChild(guessMapSubmitButton);
 
 // Onclick events
 guess_map.on('singleclick', function (e) {
+          var coord = ol.proj.fromLonLat(ol.proj.toLonLat(e.coordinate));
           var point = new ol.Feature({
-                    geometry: new ol.geom.Point(e.coordinate)
+                    geometry: new ol.geom.Point(coord)
                   });
-          var newSource = new ol.source.Vector({features: [point]});
-          vectorLayer.setSource(newSource);
+          var source = vectorLayer.getSource();
+          var oldpoint = source.getFeatureById(GUESSPOINT_ID);
+          source.removeFeature(oldpoint);
+          source.addFeature(point);
+          point.setId(GUESSPOINT_ID);
         });
 
 
 guessMapSubmitButton.onclick = function(){
   var coords;
+
+  // for debugging
+  // var homepoint = new ol.Feature({
+  //           geometry: new ol.geom.Point(HOME_COORDS)
+  //         });
+  // vectorLayer.getSource().addFeature(homepoint);
+
   if (hasUserSubmittedCoords(vectorLayer)){
     coords = getUserSubmittedCoords(vectorLayer);
     var d = distance(HOME_COORDS, coords).toFixed(1);
     var lonlat = ol.proj.toLonLat(HOME_COORDS);
     var lon = lonlat[0].toFixed(1);
     var lat = lonlat[1].toFixed(1);
-    alert("you were " + d + " kilometers away. Solution is in (Lat, Lon) = (" + lat + ", " + lon + "), "
-        + randCountry);
+
+    if (d <= WIN_DISTANCE){
+      alert('You win! Got within ' + WIN_DISTANCE + ' km of target.');
+    }
+    else {
+      getNewCircleAndDrawOnMap(ol.proj.toLonLat(coords), ol.proj.toLonLat(HOME_COORDS));
+    }
+    // alert("you were " + d + " kilometers away. Solution is in (Lat, Lon) = (" + lat + ", " + lon + "), "
+    //     + randCountry);
   }
   else {
     coords = null;
