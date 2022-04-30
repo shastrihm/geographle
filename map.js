@@ -28,6 +28,8 @@ const MIN_ZOOM = ZOOM_LEVEL;
 
 var HOME_COORDS = null; // solution to puzzle -- in mercator
 
+var EXTENT; // Ol.Extent instance; length 4 array containing [x1,y1,x2,y2] of extent box
+
 //takes an url and returns a promise of a (loaded) Image.
 function getImage(url){
     return new Promise(function(resolve, reject){
@@ -129,16 +131,17 @@ function main(){
         var lat = coords.latitude;
         var home = ol.proj.fromLonLat([long, lat]);
         HOME_COORDS = home;
+        EXTENT = [home[0]- EXTENT_OFFSET,
+                        home[1] - EXTENT_OFFSET,
+                        home[0] + EXTENT_OFFSET,
+                        home[1] + EXTENT_OFFSET];
         console.log(home);
         view = new ol.View({
           center:  home,
           zoom: ZOOM_LEVEL,
           minZoom: MIN_ZOOM,
           maxZoom: MAX_ZOOM,
-          extent: [home[0]- EXTENT_OFFSET,
-                  home[1] - EXTENT_OFFSET,
-                  home[0] + EXTENT_OFFSET,
-                  home[1] + EXTENT_OFFSET],
+          extent: EXTENT,
         });
         map.addControl(new ol.control.ZoomSlider());
         map.addControl(new ol.control.ScaleLine());

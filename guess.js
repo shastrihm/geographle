@@ -95,6 +95,8 @@ function getConstrainedCircle(guess, sol){
     circle.setRadius(init_dist);
   }
 
+  return circle;
+
   var new_radius = init_dist/2;
   var midpoint = getRandomPointDistanceKAway([guessX, guessY], new_radius);
   var precise_circle = new ol.geom.Circle(midpoint, new_radius);
@@ -106,13 +108,14 @@ function getConstrainedCircle(guess, sol){
 }
 
 function drawCircleOnMap(circle, map){
+
+
   var circleFeature = new ol.Feature(circle);
   var source = vectorLayer.getSource();
   var oldcircle = source.getFeatureById(LIMITCIRCLE_ID);
   source.removeFeature(oldcircle);
   source.addFeature(circleFeature);
   circleFeature.setId(LIMITCIRCLE_ID);
-  //vectorLayer.setSource(vectorSource);
 }
 
 function fitExtentBasedOnCircle(circle, map){
@@ -156,11 +159,12 @@ guess_map.on('singleclick', function (e) {
 guessMapSubmitButton.onclick = function(){
   var coords;
 
-  // for debugging
+  // // for debugging
   // var homepoint = new ol.Feature({
   //           geometry: new ol.geom.Point(HOME_COORDS)
   //         });
   // vectorLayer.getSource().addFeature(homepoint);
+  // //
 
   if (hasUserSubmittedCoords(vectorLayer)){
     coords = getUserSubmittedCoords(vectorLayer);
@@ -169,8 +173,8 @@ guessMapSubmitButton.onclick = function(){
     var lon = lonlat[0].toFixed(1);
     var lat = lonlat[1].toFixed(1);
 
-    if (d <= WIN_DISTANCE){
-      alert('You win! Got within ' + WIN_DISTANCE + ' km of target.');
+    if (ol.extent.containsXY(EXTENT, coords[0], coords[1])){
+      alert('You win!');
     }
     else {
       getNewCircleAndDrawOnMap(ol.proj.toLonLat(coords), ol.proj.toLonLat(HOME_COORDS));

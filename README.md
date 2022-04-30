@@ -13,4 +13,5 @@ weight countries by area?
 
 fix circle feedback strategy so that successive feedback is consistent
   - i.e. each successive circle is completely contained by the
-          previous one
+          previous one (unless you guess worse, but see if you
+            can restrict future guesses to be inside circle)
