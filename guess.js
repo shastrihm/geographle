@@ -2,7 +2,9 @@ const GUESSPOINT_ID = 'P';
 const LIMITCIRCLE_ID = 'C';
 const POINT_ICON_RADIUS = 4;
 
-const WIN_DISTANCE = 30 // in km
+const WIN_DISTANCE = 30; // in km
+var NUM_GUESSES = 5;
+
 var guess_map = new ol.Map({
         target: "guessmap",
         layers: [
@@ -138,9 +140,11 @@ function getNewCircleAndDrawOnMap(guess_coords, solution_coords){
 
 var guessMapSubmitButton = document.createElement('button');
 guessMapSubmitButton.innerHTML = 'Submit Guess';
-document.getElementById("guessmap").appendChild(guessMapSubmitButton);
+document.getElementById("submitbutton").appendChild(guessMapSubmitButton);
 
-
+var guessesRemainingDisplay = document.createElement('p');
+guessesRemainingDisplay.innerHTML = NUM_GUESSES.toString() + " guesses left";
+document.getElementById("numguesses").appendChild(guessesRemainingDisplay);
 
 // Onclick events
 guess_map.on('singleclick', function (e) {
@@ -176,11 +180,15 @@ guessMapSubmitButton.onclick = function(){
     if (ol.extent.containsXY(EXTENT, coords[0], coords[1])){
       alert('You win!');
     }
+    else if (NUM_GUESSES <= 0){
+      alert("you were " + d + " kilometers away. Solution is in (Lat, Lon) = (" + lat + ", " + lon + "), "
+          + randCountry);
+    }
     else {
       getNewCircleAndDrawOnMap(ol.proj.toLonLat(coords), ol.proj.toLonLat(HOME_COORDS));
     }
-    // alert("you were " + d + " kilometers away. Solution is in (Lat, Lon) = (" + lat + ", " + lon + "), "
-    //     + randCountry);
+    NUM_GUESSES--;
+    guessesRemainingDisplay.innerHTML = NUM_GUESSES.toString() + " guesses left";
   }
   else {
     coords = null;

@@ -1,26 +1,32 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" charset="utf-8">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.13.0/css/ol.css" type="text/css">
     <style>
       .map {
-        height: 400px;
-        width: 400px;
-      }
-    </style>
-    <style>
-      .guessmap {
         height: 300px;
-        width: 60%;
+        width: 300px;
+        display: table;
+        margin: 0 auto;
+        border: 1px solid black;
+      }
+
+      .ui {
+        display: table;
+        margin: 0 auto;
       }
     </style>
-    <title>OpenLayers example</title>
+    <title>Geographle</title>
   </head>
   <body>
-    <h2>My Map</h2>
+    <!-- <h2>My Map</h2> -->
     <div id="map" class="map"></div>
-    <div id="guessmap" class="guessmap"></div>
+    <div id="ui" class="ui">
+      <div id="submitbutton" style="display: inline-block;"></div>
+      <div id="numguesses" style="display: inline-block;"></div>
+    </div>
+    <div id="guessmap" class="map"></div>
     <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.13.0/build/ol.js"></script>
     <script src='https://unpkg.com/@turf/turf@6/turf.min.js'></script>
     <script src="countries.js"></script>
