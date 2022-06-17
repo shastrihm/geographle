@@ -1,17 +1,5 @@
-# Daily Satellite Image guessing game
-To host locally, run `python3 -m http.server 8080` from the directory of this repo
+# Wordle but with Satellite Imagery
 
-TODO:
-Easy mode (low zoom)
-Medium mode (mid zoom (for mass release?))
-Hard mode (high zoom)
+Play - https://shastrihm.github.io/geographle
 
-weight countries by area?
-  - so bigger countries can actually get picked
-  - areas densely packed with countries will balance out the lower  probability
-  - islands not overrepresented
-
-fix circle feedback strategy so that successive feedback is consistent
-  - i.e. each successive circle is completely contained by the
-          previous one (unless you guess worse, but see if you
-            can restrict future guesses to be inside circle)
+To host locally, run `python -m http.server 8080` from the root dir of this repo
