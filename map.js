@@ -81,7 +81,7 @@ function getValidStartingLatLon(bbox) {
   // Returns valid latitude/longtidude values for starting pos
   // so that its not in the ocean, and that is is within the given bbox
   // bbox is an object with attributes xmax, xmin, ymax, ymin
-  return getPixelArray("bitmap.png").then(function(new_pix){
+  return getPixelArray("assets/bitmap.png").then(function(new_pix){
     var col = Math.round(getRandomInRange(bbox.xmin, bbox.xmax));
     var row = Math.round(getRandomInRange(bbox.ymin, bbox.ymax));
     var lim = 50;

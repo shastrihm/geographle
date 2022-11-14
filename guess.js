@@ -1,10 +1,12 @@
 const GUESSPOINT_ID = 'P';
 const LIMITCIRCLE_ID = 'C';
-const POINT_ICON_RADIUS = 4;
+const USER_ICON_SCALE = 0.07;
+const ARROW_ICON_SCALE = 0.12;
 
 const WIN_DISTANCE = 30; // in km
 var NUM_GUESSES = 5;
 
+// 2D map
 var guess_map = new ol.Map({
         target: "guessmap",
         layers: [
@@ -21,13 +23,21 @@ var guess_map = new ol.Map({
 guess_map.addControl(new ol.control.ScaleLine());
 
 
-
 var vectorLayer = new ol.layer.Vector({
   source: new ol.source.Vector(), // needs to be an ol.source.Vector (see guess_map.on)
   name: "marker"
 });
 
 guess_map.addLayer(vectorLayer);
+
+
+// 3D Globe
+var guess_globe = new olcs.OLCesium({
+  map: guess_map,
+});
+guess_globe.setEnabled(true);
+
+var scene = guess_globe.getCesiumScene();
 
 
 function getUserSubmittedCoords(vectorLayer){
@@ -41,101 +51,95 @@ function hasUserSubmittedCoords(vectorLayer){
 }
 
 
-function measure(lat1, lon1, lat2, lon2){
-    var R = 6378.137; // Radius of earth in KM
-    var dLat = lat2 * Math.PI / 180 - lat1 * Math.PI / 180;
-    var dLon = lon2 * Math.PI / 180 - lon1 * Math.PI / 180;
-    var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    var d = R * c;
-    return d; // kilometers
-}
-
 function distance(pt1, pt2, convertToLonLat = true){
   // calculates distance between two points in km,
   // takes into account curvature of the earth
+
   if (convertToLonLat){
     var pt1 = ol.proj.toLonLat(pt1);
     var pt2 = ol.proj.toLonLat(pt2);
-    return measure(pt1[1], pt1[0], pt2[1], pt2[0]);
+  }
+
+  var lon1 = pt1[0];
+  var lat1 = pt1[1];
+  var tpt1 = turf.point([lon1, lat1]);
+
+  var lon2 = pt2[0];
+  var lat2 = pt2[1];
+  var tpt2 = turf.point([lon2, lat2]);
+
+  return turf.distance(tpt1, tpt2, { units: "kilometers"})
+}
+
+function placeFeedbackArrowOnMap(guess_coords, solution_coords){
+  // input in lon, lat units. gets converted to projectoin units in getConstrainedCircle
+  // 1. Computes distance d of shortest path between guess and soln
+  // 2. pick color from colormap based on d
+  // 3. compute rotation of arrow icon in one of the 8 cardinal directions
+  // 4. place colored arrow icon on map
+  // later - extra feedback panel in addition to arrow, like worldle
+  var d = distance(guess_coords, solution_coords, convertToLonLat=false);
+  
+  // compute color
+  var red = "#ff0000";
+  var orange = "#ff7700";
+  var yellow = "#ffc400";
+  var green = "#00d10a";
+    // in km
+  var greenLimit = 1000;
+  var yellowLimit = 5000;
+  var orangeLimit = 10000;
+  var redLimit = 20000;
+
+  var color;
+  if (d < greenLimit) {
+    color = Cesium.Color.GREEN;
+  }
+  else if (d < yellowLimit) {
+    color = Cesium.Color.YELLOW;
+  }
+  else if (d < orangeLimit) {
+    color = Cesium.Color.ORANGE;
   }
   else {
-    return measure(pt1[1], pt1[0], pt2[1], pt2[0]);
-  }
-}
-
-function getRandomPointDistanceKAway(center, k){
-  var angle = Math.random()*2*Math.PI;
-  var xOff = Math.cos(angle)*k;
-  var yOff = Math.sin(angle)*k;
-  return ol.proj.fromLonLat(ol.proj.toLonLat([center[0] + xOff, center[1] + yOff]));
-}
-
-function getConstrainedCircle(guess, sol){
-  // Returns circle
-  // Proceeds by exponentially increasing search radius, stop when overshoot.
-  // returns circle with diameter equal to last updated search radius,
-  // centered at midpoint between guess and end of diameter on the
-  // direction
-  // ALL COMPUTATION IS DONE IN PROJECTION UNITS (PIXELS) SO NO TAKING INTO ACCOUNT CURVATURE OF EARTH
-
-  var guess = ol.proj.fromLonLat(guess);
-  var guessX = guess[0];
-  var guessY = guess[1];
-
-  var sol = ol.proj.fromLonLat(sol);
-  var solX = sol[0];
-  var solY = sol[1];
-
-  var init_dist = 1;
-  const multipler = 2;
-  var circle = new ol.geom.Circle([guessX, guessY], init_dist);
-  while (!circle.intersectsCoordinate([solX,solY])){
-    init_dist = init_dist*multipler;
-    circle.setRadius(init_dist);
+    color = Cesium.Color.RED;
   }
 
-  return circle;
+  // compute direction
+  var bearing = turf.bearing(turf.point(guess_coords), turf.point(solution_coords));
+  var bearingRounded = Math.round(bearing / 45.0) * 45;
+  var bearingInRadians = -1*bearingRounded*(Math.PI / 180);
 
-  var new_radius = init_dist/2;
-  var midpoint = getRandomPointDistanceKAway([guessX, guessY], new_radius);
-  var precise_circle = new ol.geom.Circle(midpoint, new_radius);
-  while (!precise_circle.intersectsCoordinate([solX,solY])){
-    midpoint = getRandomPointDistanceKAway([guessX, guessY], new_radius);
-    precise_circle.setCenter(midpoint);
-  }
-  return precise_circle;
+  var arrow = new ol.Feature({
+    geometry: new ol.geom.Point(ol.proj.fromLonLat(guess_coords))
+  });
+
+  var billboards = scene.primitives.add(new Cesium.BillboardCollection());
+  billboards.add({
+    position : new Cesium.Cartesian3.fromDegrees(guess_coords[0], guess_coords[1], 0),
+    image : 'assets/arrow.svg',
+    scale : ARROW_ICON_SCALE,
+    rotation : bearingInRadians,
+    color : color,
+  });
+  // var icon = new ol.style.Icon({
+  //       scale: ARROW_ICON_SCALE,
+  //       src: "assets/arrow.svg",
+  //       color: color,
+  //       rotation: bearingInRadians,
+  //   });
+  // var arrowStyle = new ol.style.Style({
+  //   image: icon,
+  // });
+  console.log(bearing);
+  console.log(d);
+  console.log(color);
+
+  // arrow.setStyle(arrowStyle);
+  // var source = vectorLayer.getSource();
+  // source.addFeature(arrow);
+  // //point.setId(GUESSPOINT_ID);
 }
-
-function drawCircleOnMap(circle, map){
-
-
-  var circleFeature = new ol.Feature(circle);
-  var source = vectorLayer.getSource();
-  var oldcircle = source.getFeatureById(LIMITCIRCLE_ID);
-  source.removeFeature(oldcircle);
-  source.addFeature(circleFeature);
-  circleFeature.setId(LIMITCIRCLE_ID);
-}
-
-function fitExtentBasedOnCircle(circle, map){
-  // Fits map view so that it is constrained to
-  // the circle area
-  map.getView().fit(circle, {duration:2000, easing:ol.easing.easeOut});
-}
-
-
-function getNewCircleAndDrawOnMap(guess_coords, solution_coords){
-  // in lon, lat units. gets converted to projectoin units in getConstrainedCircle
-  // to fix bug where scrolling way far out on map misrepresents projection coords
-  var circle = getConstrainedCircle(guess_coords, solution_coords);
-  drawCircleOnMap(circle, guess_map);
-  fitExtentBasedOnCircle(circle, guess_map);
-}
-
-
 
 
 var guessMapSubmitButton = document.createElement('button');
@@ -147,11 +151,22 @@ guessesRemainingDisplay.innerHTML = NUM_GUESSES.toString() + " guesses left";
 document.getElementById("numguesses").appendChild(guessesRemainingDisplay);
 
 // Onclick events
-guess_map.on('singleclick', function (e) {
+guess_map.on('click', function (e) {
           var coord = ol.proj.fromLonLat(ol.proj.toLonLat(e.coordinate));
           var point = new ol.Feature({
-                    geometry: new ol.geom.Point(coord)
-                  });
+              geometry: new ol.geom.Point(coord)
+            });
+          
+          // Points can only be styled with `image` or `text` attrs
+          var pointStyle = new ol.style.Style({
+            image: new ol.style.Icon({
+                scale: USER_ICON_SCALE,
+                src: "assets/flag_green.svg"
+            }),
+          });
+
+          point.setStyle(pointStyle);
+
           var source = vectorLayer.getSource();
           var oldpoint = source.getFeatureById(GUESSPOINT_ID);
           source.removeFeature(oldpoint);
@@ -172,22 +187,26 @@ guessMapSubmitButton.onclick = function(){
 
   if (hasUserSubmittedCoords(vectorLayer)){
     coords = getUserSubmittedCoords(vectorLayer);
-    var d = distance(HOME_COORDS, coords).toFixed(1);
+    
     var lonlat = ol.proj.toLonLat(HOME_COORDS);
     var lon = lonlat[0].toFixed(1);
     var lat = lonlat[1].toFixed(1);
+    NUM_GUESSES--;
 
     if (ol.extent.containsXY(EXTENT, coords[0], coords[1])){
       alert('You win!');
+      guessMapSubmitButton.disabled = true;
     }
     else if (NUM_GUESSES <= 0){
+      var d = distance(HOME_COORDS, coords).toFixed(1);
       alert("you were " + d + " kilometers away. Solution is in (Lat, Lon) = (" + lat + ", " + lon + "), "
           + randCountry);
+      guessMapSubmitButton.disabled = true;
     }
     else {
-      getNewCircleAndDrawOnMap(ol.proj.toLonLat(coords), ol.proj.toLonLat(HOME_COORDS));
+      placeFeedbackArrowOnMap(ol.proj.toLonLat(coords), ol.proj.toLonLat(HOME_COORDS));
     }
-    NUM_GUESSES--;
+
     guessesRemainingDisplay.innerHTML = NUM_GUESSES.toString() + " guesses left";
   }
   else {
